@@ -1,0 +1,1 @@
+char *myIndex(char *patharg);
