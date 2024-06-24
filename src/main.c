@@ -2,16 +2,41 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-// #include <mongoc/mongoc.h>
+// #include <unistd.h>
+#include <mongoc/mongoc.h>
 #include "./map.h"
 #include "./routes.h"
+
+#ifdef _WIN32
+    #include <winsock2.h>
+    #pragma comment(lib, "Ws2_32.lib")
+    typedef int socklen_t;
+    #define close closesocket
+#else
+    #include <unistd.h>
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
+    #include <sys/socket.h>
+#endif
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
 bool exitMe = false;
+
+#ifdef _WIN32
+void initialize_winsock() {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        fprintf(stderr, "Failed to initialize Winsock. Error Code: %d\n", WSAGetLastError());
+        exit(EXIT_FAILURE);
+    }
+}
+
+void cleanup_winsock() {
+    WSACleanup();
+}
+#endif
 
 size_t digitCount(size_t number)
 {
@@ -22,7 +47,7 @@ size_t digitCount(size_t number)
     while (number != 0)
     {
         number /= 10;
-  
+        count++;
     }
     return count;
 }
@@ -35,7 +60,7 @@ void notfound404(int client_socket)
         "Content-Length: 3\r\n"
         "\r\n"
         "404";
-    write(client_socket, response, strlen(response));
+    send(client_socket, response, strlen(response), 0);
     close(client_socket);
 }
 
@@ -47,7 +72,7 @@ void internalError500(int client_socket)
         "Content-Length: 3\r\n"
         "\r\n"
         "500";
-    write(client_socket, response, strlen(response));
+    send(client_socket, response, strlen(response), 0);
     close(client_socket);
 }
 
@@ -56,10 +81,9 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
     char buffer[BUFFER_SIZE];
     int bytes_read;
 
-    bytes_read = read(client_socket, buffer, BUFFER_SIZE - 1);
-    if (bytes_read < 0)
-    {
-        perror("read");
+    bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_read < 0) {
+        perror("recv");
         close(client_socket);
         return;
     }
@@ -71,14 +95,14 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
     sscanf(buffer, "%s %s %s", method, path, version);
     printf("Requested path: %s\n", path);
 
-    HashTable *reqestPathMap = (HashTable *)search(requestTypeMap, method);
-    if (requestTypeMap == NULL)
+    HashTable *requestPathMap = (HashTable *)search(requestTypeMap, method);
+    if (requestPathMap == NULL)
     {
         notfound404(client_socket);
         return;
     }
 
-    char *(*pageFunc)(char *patharg) = (char *(*)())search(reqestPathMap, path);
+    char *(*pageFunc)(char *patharg) = (char *(*)(char *))search(requestPathMap, path);
     if (pageFunc == NULL)
     {
         notfound404(client_socket);
@@ -112,7 +136,7 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
     }
 
     snprintf(response, response_length, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s", str_value, pageResponse);
-    write(client_socket, response, strlen(response));
+    send(client_socket, response, strlen(response), 0);
     close(client_socket);
 }
 
@@ -123,6 +147,29 @@ char *exitTheServer(char *path) {
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+    initialize_winsock();
+#endif
+    const char *uri_string = "mongodb://localhost:27017";
+    mongoc_uri_t *uri;
+    mongoc_init();
+    bson_error_t error;
+    uri = mongoc_uri_new_with_error(uri_string, &error);
+
+    if (!uri) {
+        fprintf (stderr,
+                 "failed to parse URI: %s\n"
+                 "error message:       %s\n",
+                 uri_string,
+                 error.message);
+        return EXIT_FAILURE;
+    }
+
+    mongoc_client_t *client = mongoc_client_new_from_uri (uri);
+    if (!client) {
+        return EXIT_FAILURE;
+    }
+
     HashTable *requestsType = create_table(6);
     HashTable *getRequests = create_table(10);
     HashTable *putRequests = create_table(10);
@@ -190,5 +237,8 @@ int main(int argc, char *argv[])
     free_table(putRequests);
     free_table(requestsType);
     close(server_socket);
+#ifdef _WIN32
+    cleanup_winsock();
+#endif
     return 0;
 }

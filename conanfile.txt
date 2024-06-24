@@ -1,0 +1,7 @@
+[requires]
+mongo-c-driver/1.27.2
+[generators]
+CMakeDeps
+CMakeToolchain
+[layout]
+cmake_layout
