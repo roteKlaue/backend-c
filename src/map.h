@@ -1,7 +1,6 @@
 #ifndef CMAP_LIBRARY_H
 #define CMAP_LIBRARY_H
 
-#define INITIAL_CAPACITY 16
 #define LOAD_FACTOR 0.75
 
 typedef struct Entry

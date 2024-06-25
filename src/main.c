@@ -2,10 +2,11 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <unistd.h>
 #include <mongoc/mongoc.h>
 #include "./map.h"
 #include "./routes.h"
+#include "./mongoc-setup.h"
+#include "./util.h"
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -76,7 +77,7 @@ void internalError500(int client_socket)
     close(client_socket);
 }
 
-void handle_client(int client_socket, HashTable *requestTypeMap)
+void handle_client(int client_socket, HashTable *request_type_map, mongoc_client_t *mongo_client)
 {
     char buffer[BUFFER_SIZE];
     int bytes_read;
@@ -94,27 +95,29 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
     char method[16], path[256], version[16];
     sscanf(buffer, "%s %s %s", method, path, version);
     printf("Requested path: %s\n", path);
+    char actual_path[256];
+    strcpy_until_char(actual_path, path, '?');
 
-    HashTable *requestPathMap = (HashTable *)search(requestTypeMap, method);
-    if (requestPathMap == NULL)
+    HashTable *request_path_map = (HashTable *)search(request_type_map, method);
+    if (request_path_map == NULL)
     {
         notfound404(client_socket);
         return;
     }
 
-    char *(*pageFunc)(char *patharg) = (char *(*)(char *))search(requestPathMap, path);
-    if (pageFunc == NULL)
+    char *(*path_func)(char *path_arg) = (char *(*)(char *))search(request_path_map, actual_path);
+    if (path_func == NULL)
     {
         notfound404(client_socket);
         return;
     }
 
-    const char *pageResponse = pageFunc(path);
+    const char *page_response = path_func(path);
 
-    size_t pageResponseLength = strlen(pageResponse);
-    size_t numDigits = digitCount(pageResponseLength);
+    size_t page_response_length = strlen(page_response);
+    size_t num_digits = digitCount(page_response_length);
 
-    char *str_value = (char *)malloc(sizeof(char) * (numDigits + 1));
+    char *str_value = (char *)malloc(sizeof(char) * (num_digits + 1));
 
     if (str_value == NULL)
     {
@@ -123,8 +126,8 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
         return;
     }
 
-    sprintf(str_value, "%zu", pageResponseLength);
-    size_t response_length = strlen("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: \r\n\r\n") + numDigits + pageResponseLength + 1;
+    sprintf(str_value, "%zu", page_response_length);
+    size_t response_length = strlen("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: \r\n\r\n") + num_digits + page_response_length + 1;
     char *response = (char *)malloc(response_length);
 
     if (response == NULL)
@@ -135,12 +138,12 @@ void handle_client(int client_socket, HashTable *requestTypeMap)
         return;
     }
 
-    snprintf(response, response_length, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s", str_value, pageResponse);
+    snprintf(response, response_length, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s", str_value, page_response);
     send(client_socket, response, strlen(response), 0);
     close(client_socket);
 }
 
-char *exitTheServer(char *path) {
+char *exit_the_server(char *path) {
     exitMe = true;
     return "exiting the game";
 }
@@ -150,27 +153,9 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
     initialize_winsock();
 #endif
-    const char *uri_string = "mongodb://localhost:27017";
-    mongoc_uri_t *uri;
-    mongoc_init();
-    bson_error_t error;
-    uri = mongoc_uri_new_with_error(uri_string, &error);
+    mongoc_client_t *client = setup_mongoc();
 
-    if (!uri) {
-        fprintf (stderr,
-                 "failed to parse URI: %s\n"
-                 "error message:       %s\n",
-                 uri_string,
-                 error.message);
-        return EXIT_FAILURE;
-    }
-
-    mongoc_client_t *client = mongoc_client_new_from_uri (uri);
-    if (!client) {
-        return EXIT_FAILURE;
-    }
-
-    HashTable *requestsType = create_table(6);
+    HashTable *requestsType = create_table(5);
     HashTable *getRequests = create_table(10);
     HashTable *putRequests = create_table(10);
     HashTable *patchRequests =  create_table(10);
@@ -183,14 +168,13 @@ int main(int argc, char *argv[])
     insert(requestsType, "PATCH", patchRequests);
     insert(requestsType, "DELETE", deleteRequests);
 
-    insert(getRequests, "/", (void *)&myIndex);
-    insert(getRequests, "/exit", (void *)&exitTheServer);
+    insert(getRequests, "/", &my_index);
+    insert(getRequests, "/exit", &exit_the_server);
 
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    // Create a socket
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0)
     {
@@ -227,7 +211,7 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        handle_client(client_socket, requestsType);
+        handle_client(client_socket, requestsType, client);
     }
 
     free_table(getRequests);

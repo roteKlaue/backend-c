@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define INITIAL_CAPACITY 16
 #define LOAD_FACTOR 0.75
 
 unsigned int hash(const char *key, const int capacity) {
