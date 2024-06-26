@@ -9,7 +9,7 @@
 unsigned int hash(const char *key, const int capacity) {
     unsigned long hash = 5381;
     int c;
-    while ((c = *key++)) {
+    while ((c = (unsigned char) *key++)) {
         hash = ((hash << 5) + hash) + c;
     }
     return hash % capacity;
@@ -33,8 +33,6 @@ Entry* create_entry(const char *key, void *value) {
     entry->next = NULL;
     return entry;
 }
-
-void resize(HashTable *table);
 
 void insert(HashTable *table, const char *key, void *value) {
     const unsigned int bucket = hash(key, table->capacity);

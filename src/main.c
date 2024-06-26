@@ -5,7 +5,7 @@
 #include <mongoc/mongoc.h>
 #include "./map.h"
 #include "./routes.h"
-#include "./mongoc-setup.h"
+#include "./mongoc.h"
 #include "./util.h"
 
 #ifdef _WIN32
@@ -97,6 +97,7 @@ void handle_client(int client_socket, HashTable *request_type_map, mongoc_client
     printf("Requested path: %s\n", path);
     char actual_path[256];
     strcpy_until_char(actual_path, path, '?');
+    printf("Requested actual path: %s\n", actual_path);
 
     HashTable *request_path_map = (HashTable *)search(request_type_map, method);
     if (request_path_map == NULL)
@@ -105,14 +106,17 @@ void handle_client(int client_socket, HashTable *request_type_map, mongoc_client
         return;
     }
 
-    char *(*path_func)(char *path_arg) = (char *(*)(char *))search(request_path_map, actual_path);
+    char *(*path_func)(char *path_arg, HashTable *query_params, mongoc_client_t *mongo_client) = (char *(*)(char *, HashTable *, mongoc_client_t *))search(request_path_map, actual_path);
     if (path_func == NULL)
     {
         notfound404(client_socket);
         return;
     }
 
-    const char *page_response = path_func(path);
+    HashTable *params = create_table(10);
+    parse_url_params(params, path);
+
+    const char *page_response = path_func(path, params, mongo_client);
 
     size_t page_response_length = strlen(page_response);
     size_t num_digits = digitCount(page_response_length);
@@ -141,6 +145,8 @@ void handle_client(int client_socket, HashTable *request_type_map, mongoc_client
     snprintf(response, response_length, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s", str_value, page_response);
     send(client_socket, response, strlen(response), 0);
     close(client_socket);
+    free_table(params);
+    free(response);
 }
 
 char *exit_the_server(char *path) {
@@ -153,7 +159,11 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
     initialize_winsock();
 #endif
-    mongoc_client_t *client = setup_mongoc();
+    mongoc_client_t *client = setup_mongoc("mongodb://localhost:27017", "wmc-c-backend");
+
+    if (client == NULL) {
+        return EXIT_FAILURE;
+    }
 
     HashTable *requestsType = create_table(5);
     HashTable *getRequests = create_table(10);
@@ -170,6 +180,10 @@ int main(int argc, char *argv[])
 
     insert(getRequests, "/", &my_index);
     insert(getRequests, "/exit", &exit_the_server);
+    insert(getRequests, "/michi", &michi);
+    insert(getRequests, "/michi/", &michi);
+    insert(getRequests, "/games", &get_gamer);
+    insert(getRequests, "/games/", &get_gamer);
 
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
