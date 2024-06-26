@@ -1,4 +1,7 @@
 #include <mongoc/mongoc.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 
 mongoc_client_t *setup_mongoc(const char *uri_string, const char *application_name) {
     mongoc_init();
@@ -22,6 +25,7 @@ mongoc_client_t *setup_mongoc(const char *uri_string, const char *application_na
 
     mongoc_client_set_appname(client, application_name);
 
+    mongoc_uri_destroy (uri);
     return client;
 }
 
@@ -76,7 +80,7 @@ char *get_games(mongoc_client_t *client, const char *db_name, const char *collec
         }
 
         strcat(json_result, str);
-        json_len += str_len + 1; // Plus one for the comma
+        json_len += str_len + 1;
 
         bson_free(str);
     }
@@ -93,4 +97,9 @@ char *get_games(mongoc_client_t *client, const char *db_name, const char *collec
     mongoc_collection_destroy(collection);
 
     return json_result;
+}
+
+void clean_up_mongoc(mongoc_client_t *client) {
+    mongoc_client_destroy(client);
+    mongoc_cleanup();
 }

@@ -51,7 +51,7 @@ void insert(HashTable *table, const char *key, void *value) {
     table->entries[bucket] = entry;
     table->size++;
 
-    if ((float)table->size / table->capacity >= LOAD_FACTOR) {
+    if ((float)table->size / (float)table->capacity >= LOAD_FACTOR) {
         resize(table);
     }
 }
