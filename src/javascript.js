@@ -18,3 +18,4 @@ const gamesSchema = new Schema({
 const gamesModel = model("game", gamesSchema, "games");
 
 module.exports.getGames = () => gamesModel.find();
+module.exports.getGame = id => gamesModel.findOne({ id });

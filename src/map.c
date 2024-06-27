@@ -6,7 +6,8 @@
 
 #define LOAD_FACTOR 0.75
 
-unsigned int hash(const char *key, const int capacity) {
+unsigned int hash(const char *key, const int capacity)
+{
     unsigned long hash = 5381;
     int c;
     while ((c = (unsigned char) *key++)) {
@@ -15,7 +16,8 @@ unsigned int hash(const char *key, const int capacity) {
     return hash % capacity;
 }
 
-HashTable* create_table(const int capacity) {
+HashTable* create_table(const int capacity)
+{
     HashTable *table = malloc(sizeof(HashTable));
     table->entries = malloc(sizeof(Entry*) * capacity);
     for (int i = 0; i < capacity; i++) {
@@ -26,7 +28,8 @@ HashTable* create_table(const int capacity) {
     return table;
 }
 
-Entry* create_entry(const char *key, void *value) {
+Entry* create_entry(const char *key, void *value)
+{
     Entry *entry = malloc(sizeof(Entry));
     entry->key = strdup(key);
     entry->value = value;
@@ -34,7 +37,8 @@ Entry* create_entry(const char *key, void *value) {
     return entry;
 }
 
-void insert(HashTable *table, const char *key, void *value) {
+void insert(HashTable *table, const char *key, void *value)
+{
     const unsigned int bucket = hash(key, table->capacity);
     Entry *entry = table->entries[bucket];
 
@@ -56,7 +60,8 @@ void insert(HashTable *table, const char *key, void *value) {
     }
 }
 
-void *search(const HashTable *table, const char *key) {
+void *search(const HashTable *table, const char *key)
+{
     const unsigned int bucket = hash(key, table->capacity);
     const Entry *entry = table->entries[bucket];
 
@@ -69,7 +74,8 @@ void *search(const HashTable *table, const char *key) {
     return NULL;
 }
 
-void delete(HashTable *table, const char *key) {
+void delete(HashTable *table, const char *key)
+{
     const unsigned int bucket = hash(key, table->capacity);
     Entry *entry = table->entries[bucket];
     Entry *prev = NULL;
@@ -94,7 +100,8 @@ void delete(HashTable *table, const char *key) {
     table->size--;
 }
 
-void resize(HashTable *table) {
+void resize(HashTable *table)
+{
     const int new_capacity = table->capacity * 2;
     Entry **new_entries = malloc(sizeof(Entry*) * new_capacity);
     for (int i = 0; i < new_capacity; i++) {
@@ -117,7 +124,8 @@ void resize(HashTable *table) {
     table->capacity = new_capacity;
 }
 
-void free_table(HashTable *table) {
+void free_table(HashTable *table)
+{
     for (int i = 0; i < table->capacity; i++) {
         Entry *entry = table->entries[i];
         while (entry != NULL) {
